@@ -20,9 +20,6 @@ jobs:
       REGISTRY_USER: ${{ github.actor }}
       REGISTRY_PASSWORD: ${{ github.token }}
       IMAGE_REGISTRY: ghcr.io
-      ORG_NAME: idevsig
-      IMAGE: cfspeedtest
-      TAG: latest
     steps:
       - 
         name: Checkout
@@ -48,7 +45,7 @@ jobs:
           file: ./Containerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ env.ORG_NAME }}/${{ env.IMAGE }}:${{ env.TAG }}
+          tags: ${{ env.IMAGE_REGISTRY }}/idevsig/cfspeedtest:latest
 
   build-docker:
     name: Build And Push Docker Hub
@@ -56,8 +53,6 @@ jobs:
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      IMAGE: cfspeedtest
-      TAG: latest
 
     steps:
       - 
@@ -83,4 +78,4 @@ jobs:
           file: ./Containerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE }}:${{ env.TAG }}
+          tags: ${{ env.DOCKERHUB_USERNAME }}/cfspeedtest:latest
