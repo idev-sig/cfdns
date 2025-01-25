@@ -1,35 +1,51 @@
-# CloudflareSpeedTest
+# CloudflareDNS
 
-[**CloudflareSpeedTest**](https://github.com/XIU2/CloudflareSpeedTest) Docker 版
+依赖 [**CloudflareSpeedTest**](https://github.com/XIU2/CloudflareSpeedTest) 
 
-## 使用本项目提供的镜像
-
-- ghcr.io: https://github.com/idevsig/docker-cfspeedtest/packages
-- Docker Hub: https://hub.docker.com/r/jetsung/cfspeedtest
-
-## Docker 构建
+## Docker 构建与拉取
 
 ### 本地构建
-```bash
-docker build -t cfst . -f Containerfile
+```sh
+docker build -t cfdns . -f Containerfile
 ```
 
-### 使用 
-```bash
-# 使用默认的 ip.txt
-docker run --rm cfst
+### 使用本项目提供的镜像
 
-# 确保当前目录下有 ip.txt 文件
-# 可从 https://www.cloudflare.com/ips-v4 中提取
-docker run --rm -v $(pwd):/app cfst
-```
+- [**ghcr.io**: https://github.com/idevsig/cfdns/packages](https://github.com/idevsig/cfdns/packages)
+- [Docker Hub: https://hub.docker.com/r/idevsig/cfdns](https://hub.docker.com/r/idevsig/cfdns)
 
-从源站获取
-```bash
-docker pull jetsung/cfspeedtest:latest
+```sh
+docker pull idevsig/cfdns:latest
 
 # 或者
-docker pull ghcr.io/idevsig/cfspeedtest:latest
+docker pull ghcr.io/idevsig/cfdns:latest
 ```
 
-运行后，生成的 `result.csv` 是最终结果。具体参数，可查阅 [**CloudflareSpeedTest**](https://github.com/XIU2/CloudflareSpeedTest) 项目。
+## 使用 
+```sh
+usage: ./cfspeedtest.sh [ options ]
+
+  -h, --help                           print help
+  -a, --account <account>              set Cloudflare account
+  -k, --key <key>                      set API key
+  -t, --type <type>                    set zone type
+  -d, --domain <domain>                set domain
+  -p, --prefix <prefix>                set prefix
+  -f, --force                          force refresh ip.txt
+  -r, --refresh                        refresh dns
+  -s, --speed <speed>                  set download speed
+  -c, --cdn <cdn>                      set api cdn
+  -n, --dns                            refresh dns
+  -o, --only                           only refresh one host
+
+example: 
+  ./cfspeedtest.sh -a user@example.com -k api_key -d example.com -p cf -s 50 -n -o
+```
+
+## 仓库镜像
+
+- https://git.jetsung.com/idev/cfdns
+- https://framagit.org/idev/cfdns
+- https://gitcode.com/idev/cfdns
+- https://github.com/idevsig/cfdns
+  
