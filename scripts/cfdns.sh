@@ -107,7 +107,7 @@ create_record() {
 
     # echo "$UPDATE_DATE"
 
-    generate_result | jq -r
+    generate_result | jq -r '"Type: " + .type + " , Name: " + .name + " , Record: " + .content'
 }
 
 delete_record() {
@@ -143,7 +143,7 @@ update_record() {
       "content": "%s"
     }' "$CONTENT")
 
-    generate_result | jq -r
+    generate_result | jq -r '"Type: " + .type + " , Name: " + .name + " , Record: " + .content'
 }
 
 get_record() {
@@ -418,4 +418,4 @@ main() {
     fi    
 }
 
-main "$@" || exit 1
+main "$@"

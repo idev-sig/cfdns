@@ -24,7 +24,7 @@ ZONE_TYPE="A" # 记录类型
 DOMAIN=""     # 记录域名
 PREFIX=""     # 记录前缀
 
-SPEED="100"   # 下载速度默认 100 以上
+SPEED="2"   # 下载速度默认 2(M)以上
 FORCE=""      # 拉取最新的 ip.txt
 REFRESH=""    # 强制刷新 result.csv
 DNS=""        # 刷新 DNS
@@ -173,16 +173,14 @@ check_ip_file() {
 }
 
 check_result_file() {
-    # 结果文件不存在
-    if [ ! -f "$RESULT_CSV" ]; then
-        run_cfst
-        return
-    fi
-
     # 强制刷新
     if [ -n "$REFRESH" ]; then
         run_cfst
-        return
+    fi
+
+    # 结果文件不存在
+    if [ ! -f "$RESULT_CSV" ]; then
+        run_cfst
     fi
 
     # 获取文件的修改时间（24小时内的文件不刷新）
@@ -291,14 +289,14 @@ refresh_dns() {
         if (( $(echo "$speed < $SPEED" | bc -l) )); then
             break
         fi
-        # echo "$ipv4: $speed"
-        ((index++))
-        # echo "index: $index"
+
+        index=$(echo "$index + 1" | bc)
+
         "$CF_DNS_EXEC" -a "$CLOUDFLARE_EMAIL" \
             -k "$CLOUDFLARE_API_KEY" \
             -ac set_record \
             -zn "$DOMAIN" -rn "${PREFIX}${index}" -zy "$ZONE_TYPE" -ct "$ipv4"
-    done < <(tail -n +2 "$RESULT_CSV")
+    done < <(tail -n +2 "$RESULT_CSV") 
 }
 
 # 处理参数信息
@@ -401,9 +399,13 @@ usage: $0 [ options ]
   -n, --dns                            refresh dns
   -o, --only                           only refresh one host
 
-example: 
-  $0 -a user@example.com -k api_key -d example.com -p cf -s 50 -n -o
+e.g.: 
+  $0 -a user@example.com -k api_key -d example.com -p cf -s 2 -n -o
 
+e.g.:
+  export CLOUDFLARE_API_KEY="api_key"
+  export CLOUDFLARE_EMAIL="user@example.com"
+  $0 -d example.com -p cf -s 2 -n -o
 EOF
     exit 0
 }

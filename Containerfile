@@ -17,8 +17,9 @@ RUN apk add --no-cache curl bash jq
 
 COPY --from=builder /app/CloudflareSpeedTest/CloudflareSpeedTest /usr/local/bin/CloudflareSpeedTest 
 COPY --from=builder /app/CloudflareSpeedTest/ip.txt /app/ip.txt
-COPY --from=builder /app/CloudflareSpeedTest/scripts/cfspeedtest.sh /usr/local/bin/cfspeedtest
-COPY --from=builder /app/CloudflareSpeedTest/scripts/cfdns.sh /usr/local/bin/cfdns
+
+COPY scripts/cfspeedtest.sh /usr/local/bin/cfspeedtest
+COPY scripts/cfdns.sh /usr/local/bin/cfdns
 
 RUN chmod +x /usr/local/bin/cfspeedtest
 RUN chmod +x /usr/local/bin/cfdns
