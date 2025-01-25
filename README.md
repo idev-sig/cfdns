@@ -12,7 +12,7 @@ docker build -t cfdns . -f Containerfile
 ### 使用本项目提供的镜像
 
 - [**ghcr.io**: https://github.com/idevsig/cfdns/packages](https://github.com/idevsig/cfdns/packages)
-- [Docker Hub: https://hub.docker.com/r/idevsig/cfdns](https://hub.docker.com/r/idevsig/cfdns)
+- [**Docker Hub**: https://hub.docker.com/r/idevsig/cfdns](https://hub.docker.com/r/idevsig/cfdns)
 
 ```sh
 docker pull idevsig/cfdns:latest

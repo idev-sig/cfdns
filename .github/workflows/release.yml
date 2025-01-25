@@ -80,8 +80,8 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           push: true
-          platforms: linux/amd64
-          build-args: GITHUB_SHA=${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          file: Containerfile
           tags: |
             ${{ steps.generate_tags.outputs.ghcr_image_tag }}
             ${{ steps.generate_tags.outputs.ghcr_image_latest || '' }}
