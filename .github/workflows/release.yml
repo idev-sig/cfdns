@@ -53,8 +53,11 @@ jobs:
 
           # Check if the current ref is a tag
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            echo "Detected tag: ${{ github.ref_name }}"
-            echo "ghcr_image_tag=$GHCR_REPO:${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            # delete tag as v0.1.0 to 0.1.0
+            ref_tag="${{ github.ref_name }}"
+            ref_tag="${ref_tag#v}"
+            echo "Detected tag: $ref_tag"
+            echo "ghcr_image_tag=$GHCR_REPO:$ref_tag" >> $GITHUB_OUTPUT
             echo "ghcr_image_latest=$GHCR_REPO:latest" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref_name }}" == "main" ]]; then
             echo "ghcr_image_tag=$GHCR_REPO:main" >> $GITHUB_OUTPUT
@@ -68,7 +71,10 @@ jobs:
           # Docker Hub tags (if credentials provided)
           if [[ "${{ steps.check_docker_creds.outputs.docker_creds_exist }}" == "true" ]]; then
             if [[ "${{ github.ref_type }}" == "tag" ]]; then
-              echo "docker_image_tag=$DOCKER_REPO:${{ github.ref_name }}" >> $GITHUB_OUTPUT
+              ref_tag="${{ github.ref_name }}"
+              ref_tag="${ref_tag#v}"
+              echo "Detected tag: $ref_tag"
+              echo "docker_image_tag=$DOCKER_REPO:$ref_tag" >> $GITHUB_OUTPUT
               echo "docker_image_latest=$DOCKER_REPO:latest" >> $GITHUB_OUTPUT
             elif [[ "${{ github.ref_name }}" == "main" ]]; then
               echo "docker_image_tag=$DOCKER_REPO:main" >> $GITHUB_OUTPUT
