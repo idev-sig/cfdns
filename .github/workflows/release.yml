@@ -4,8 +4,9 @@ on:
   push:
     branches:
       - main
-      - v*
       - dev*
+    tags:
+      - "*"
     paths:
       - "Containerfile"
       - ".github/workflows/release.yml"
