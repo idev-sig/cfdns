@@ -11,7 +11,10 @@ PROJ_URL="https://github.com/idevsig/cfdns/raw/refs/heads/main"
 CN_PROJ_URL="https://framagit.org/idev/cfdns/-/raw/main"
 
 IP_DATA_URL=""
-IP_DATA_URL_CF="https://www.cloudflare.com/ips-v4"
+IP_DATA_URL_CLOUDFLARE="https://www.cloudflare.com/ips-v4"
+IP_DATA_URL_GCORE_JSON="https://api.gcore.com/cdn/public-ip-list"
+IP_DATA_URL_CLOUDFRONT_JSON="https://d7uri8nf7uskq.cloudfront.net/tools/list-cloudfront-ips"
+IP_DATA_URL_AMAZON_JSON="https://ip-ranges.amazonaws.com/ip-ranges.json"
 
 IN_CHINA="" # 是否在中国
 
@@ -172,14 +175,30 @@ check_ip_file() {
         exit 1
     fi
 
-    if [ "$IP_DATA_URL" = 'cf' ]; then
-        IP_DATA_URL="${API_CDN}/${IP_DATA_URL_CF//https:\/\/}"
-    fi
 
-    if [ -n "$IP_DATA_URL" ]; then
-        curl -fsSL -o "$_ip_file" "$IP_DATA_URL"
-    fi
-    
+    case "$IP_DATA_URL" in
+        cf)
+            IP_DATA_URL="${API_CDN}/${IP_DATA_URL_CLOUDFLARE//https:\/\/}"
+            curl -fsSL -o "$_ip_file" "$IP_DATA_URL"
+            ;;
+        gc)
+            IP_DATA_URL="${API_CDN}/${IP_DATA_URL_GCORE_JSON//https:\/\/}"
+            curl -fsSL "$IP_DATA_URL" | jq -r '.addresses[]' > "$_ip_file"
+            ;;
+        ct)
+            IP_DATA_URL="${API_CDN}/${IP_DATA_URL_CLOUDFRONT_JSON//https:\/\/}"
+            curl -fsSL "$IP_DATA_URL" | jq -r '.CLOUDFRONT_GLOBAL_IP_LIST[]' > "$_ip_file"
+            ;;
+        aws)
+            IP_DATA_URL="${API_CDN}/${IP_DATA_URL_AMAZON_JSON//https:\/\/}"
+            curl -fsSL "$IP_DATA_URL" | jq -r '.prefixes[].ip_prefix' > "$_ip_file"
+            ;;
+        *)
+            echo -e "\033[31mIP data URL $IP_DATA_URL is not supported\033[0m"
+            exit 1
+            ;;
+    esac    
+
     if [ ! -f "$_ip_file" ]; then
         echo -e "\033[31m$_ip_file not found\033[0m"
         exit 1
@@ -419,13 +438,20 @@ judgment_parameters() {
             # IP 数据源 URL
                 shift
                 IP_DATA_URL="${1:?"error: Please specify the correct url."}"
-                # 若非 CF，则需要判断是否为 URL
-                if [ "$IP_DATA_URL" != 'cf' ]; then
-                    if ! is_url "$IP_DATA_URL"; then
-                        echo -e "\033[31mIP_DATA_URL must be a valid URL\033[0m" 1>&2
-                        exit 1
-                    fi                
-                fi
+
+                # 检查 IP_DATA_URL 是否为非 CF、GC、AWS、CT 的 URL，若为普通 URL，则验证其有效性
+                case $IP_DATA_URL in
+                    cf|gc|aws|ct)
+                        # 如果是 CF、GC、AWS、CT，则无需验证 URL
+                        ;;
+                    *)
+                        # 验证是否为有效 URL
+                        if ! is_url "$IP_DATA_URL"; then
+                            echo -e "\033[31mIP_DATA_URL must be a valid URL\033[0m" 1>&2
+                            exit 1
+                        fi
+                        ;;
+                esac                  
                 ;;
 
             '-r' | '--refresh') 

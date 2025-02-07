@@ -22,6 +22,66 @@ docker pull ghcr.io/idevsig/cfdns:latest
 ```
 
 ## 使用 
+
+### Docker 方式
+
+```sh
+docker run --rm idevsig/cfdns:latest cfspeedtest -a user@example.com -k api_key -d example.com -p cf -s 5 -n -o
+```
+
+#### `docker compose` 方式
+
+1. `docker-compose.yml`
+```yaml
+services:
+  cfdns:
+    image: idevsig/cfdns:latest
+    container_name: cfdns
+    restart: unless-stopped
+    environment:
+      - CLOUDFLARE_API_KEY=api_key
+      - CLOUDFLARE_EMAIL=user@example.com
+      - TZ=Asia/Shanghai
+    command: ["daemon"]
+```
+
+运行
+```sh
+docker compose up -d
+```
+
+2. 设置定时计划
+```sh
+# 添加定时计划
+docker exec cfdns sh -c "echo '15 4 * * * cd /app; cfspeedtest -d example.com -p cf -r -n' | crontab -"
+
+# 停止计划任务
+docker exec cfdns pkill crond
+# or 强制停止计划任务
+docker exec cfdns killall crond
+
+# 重启计划任务
+docker exec cfdns pkill -HUP crond
+# or
+docker exec cfdns pkill crond && crond
+```
+
+- 脚本方式（位于文件夹 `scripts`）
+
+```sh
+e.g.: 
+  ./cfspeedtest.sh -a user@example.com -k api_key -d example.com -p cf -s 2 -n -o
+
+e.g.:
+  export CLOUDFLARE_API_KEY="api_key"
+  export CLOUDFLARE_EMAIL="user@example.com"
+  ./cfspeedtest.sh -d example.com -p cf -s 2 -n -o
+```
+
+---
+
+## 帮助
+
 ```sh
 usage: ./cfspeedtest.sh [ options ]
 
@@ -37,18 +97,9 @@ usage: ./cfspeedtest.sh [ options ]
   -u, --url <url>                      set speed test url
   -P, --port <port>                    set speed test port
   -e, --extend <string>                set extend string
-  -f, --force                          force refresh ip.txt
   -r, --refresh                        refresh result.csv
   -n, --dns                            update DNS records 
   -o, --only                           only refresh one host
-
-e.g.: 
-  ./cfspeedtest.sh -a user@example.com -k api_key -d example.com -p cf -s 2 -n -o
-
-e.g.:
-  export CLOUDFLARE_API_KEY="api_key"
-  export CLOUDFLARE_EMAIL="user@example.com"
-  ./cfspeedtest.sh -d example.com -p cf -s 2 -n -o
 ```
 
 > `-h` / `--help`:             帮助信息   
@@ -99,48 +150,6 @@ e.g.:
 ```
 
 ---
-
-### 使用 **Docker**
-```sh
-docker run --rm idevsig/cfdns:latest cfspeedtest -a user@example.com -k api_key -d example.com -p cf -s 5 -n -o
-```
-
-- **`docker compose` 方式**
-
-1. `docker-compose.yml`
-```yaml
-services:
-  cfdns:
-    image: idevsig/cfdns:latest
-    container_name: cfdns
-    restart: unless-stopped
-    environment:
-      - CLOUDFLARE_API_KEY=api_key
-      - CLOUDFLARE_EMAIL=user@example.com
-      - TZ=Asia/Shanghai
-    command: ["daemon"]
-```
-
-运行
-```sh
-docker compose up -d
-```
-
-2. 设置定时计划
-```sh
-# 添加定时计划
-docker exec cfdns sh -c "echo '15 4 * * * cd /app; cfspeedtest -d example.com -p cf -r -n' | crontab - && crond"
-
-# 停止计划任务
-docker exec cfdns pkill crond
-# or 强制停止计划任务
-docker exec cfdns killall crond
-
-# 重启计划任务
-docker exec cfdns pkill -HUP crond
-# or
-docker exec cfdns pkill crond && crond
-```
 
 ## 仓库镜像
 
