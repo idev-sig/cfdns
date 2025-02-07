@@ -10,6 +10,9 @@ set -euo pipefail
 PROJ_URL="https://github.com/idevsig/cfdns/raw/refs/heads/main"
 CN_PROJ_URL="https://framagit.org/idev/cfdns/-/raw/main"
 
+IP_DATA_URL=""
+IP_DATA_URL_CF="https://www.cloudflare.com/ips-v4"
+
 IN_CHINA="" # 是否在中国
 
 CURRENT_EXEC_FILE="/usr/local/bin/cfspeedtest.sh"
@@ -25,10 +28,12 @@ DOMAIN=""     # 记录域名
 PREFIX=""     # 记录前缀
 
 SPEED="2"   # 下载速度默认 2(M)以上
-FORCE=""      # 拉取最新的 ip.txt
 REFRESH=""    # 强制刷新 result.csv
 DNS=""        # 刷新 DNS
 ONLY=""       # 只刷新指定主机名
+SPEED_PORT="" # 速度测试端口
+SPEED_URL=""  # 速度测试 URL
+EXTEND_STRING="" # 扩展字符串
 
 init_os() {
     OS=$(uname | tr '[:upper:]' '[:lower:]')
@@ -160,15 +165,24 @@ check_ip_file() {
         exit 1
     fi
 
-    _ip_file="ip.txt"
-    _ipv4_url="https://www.cloudflare.com/ips-v4"
-
-    if [ -n "$FORCE" ]; then
-        curl -fsSL -o "$_ip_file" "$_ipv4_url"
+    local _ip_file="ip.txt"
+    
+    if [ -z "$IP_DATA_URL" ] && [ ! -f "$_ip_file" ]; then 
+        echo -e "\033[31m${_ip_file} not found\033[0m"
+        exit 1
     fi
 
+    if [ "$IP_DATA_URL" = 'cf' ]; then
+        IP_DATA_URL="${API_CDN}/${IP_DATA_URL_CF//https:\/\/}"
+    fi
+
+    if [ -n "$IP_DATA_URL" ]; then
+        curl -fsSL -o "$_ip_file" "$IP_DATA_URL"
+    fi
+    
     if [ ! -f "$_ip_file" ]; then
-        curl -fsSL -o "$_ip_file" "$_ipv4_url"
+        echo -e "\033[31m$_ip_file not found\033[0m"
+        exit 1
     fi
 }
 
@@ -202,7 +216,19 @@ check_result_file() {
 }
 
 run_cfst() {
-    "$CFST_FILE" || {
+    RUN_PARAMS=()
+
+    if [ -n "$SPEED_PORT" ]; then
+        RUN_PARAMS+=("-tp" "$SPEED_PORT")
+    fi
+    if [ -n "$SPEED_URL" ]; then
+        RUN_PARAMS+=("-url" "$SPEED_URL")
+    fi
+    if [ -n "$EXTEND_STRING" ]; then
+        RUN_PARAMS+=("$EXTEND_STRING")
+    fi
+
+    "$CFST_FILE" "${RUN_PARAMS[@]}" || {
         echo -e "\033[31m$CFST_FILE run failed, please check the log\033[0m"
         exit 1
     }
@@ -314,19 +340,34 @@ judgment_parameters() {
 
     while [[ "$#" -gt '0' ]]; do
         case "$1" in
-            '-a' | '--account') # Cloudflare 账号
+            '-a' | '--account') 
+            # Cloudflare 账号
                 shift
                 CLOUDFLARE_EMAIL="${1:?"error: Please specify the correct account."}"
                 ;;
-            '-k' | '--key') # Cloudflare API key
+            '-k' | '--key') 
+            # Cloudflare API key
                 shift
                 CLOUDFLARE_API_KEY="${1:?"error: Please specify the correct api key."}"
                 ;;
-            '-t' | '--type') # 记录类型
+            '-t' | '--type') 
+            # 记录类型
                 shift
                 ZONE_TYPE="${1:?"error: Please specify the correct zone type."}"
                 ;;
-            '-d' | '--domain') # 记录域名
+            '-e' | '--extend') 
+            # 扩展字符串
+                shift
+                EXTEND_STRING="${1:?"error: Please specify the correct extend string."}"
+                ;;
+            '-p' | '--prefix') 
+            # 记录前缀
+                shift
+                PREFIX="${1:?"error: Please specify the correct prefix."}"
+                ;;
+                
+            '-d' | '--domain') 
+            # 记录域名
                 shift
                 DOMAIN="${1:?"error: Please specify the correct domain."}"
                 # CHECK DOMAIN
@@ -334,27 +375,19 @@ judgment_parameters() {
                     echo -e "\033[31mDOMAIN must be a domain name\033[0m"
                     exit 1
                 fi
-                ;;
-            '-p' | '--prefix') # 记录前缀
-                shift
-                PREFIX="${1:?"error: Please specify the correct prefix."}"
-                ;;
-            '-f' | '--force') # 拉取最新的 ip.txt
-                FORCE="true"
-                ;;
-            '-r' | '--refresh') # 刷新 dns
-                REFRESH="true"
-                ;;
-            '-s' | '--speed') # 下载速度下限
+                ;;                
+            '-s' | '--speed') 
+            # 下载速度下限
                 shift
                 SPEED="${1:?"error: Please specify the correct speed."}"
-                # SPEED > 0
-                if (( $(echo "$SPEED <= 0" | bc -l) )); then
-                    echo -e "\033[31mSPEED must be greater than 0\033[0m"
+                # SPEED >= 0
+                if (( $(echo "$SPEED < 0" | bc -l) )); then
+                    echo -e "\033[31mSPEED must be greater than or equal to 0\033[0m" 1>&2
                     exit 1
                 fi  
                 ;;
-            '-c' | '--cdn') # API CDN
+            '-c' | '--cdn') 
+            # API CDN
                 shift
                 API_CDN="${1:?"error: Please specify the correct cdn."}"
                 # CEHCK WEB URL
@@ -363,12 +396,51 @@ judgment_parameters() {
                     exit 1
                 fi
                 ;;
-            '-n' | '--dns') # 刷新 DNS
+            '-P' | '--port')
+            # 速度测试端口
+                shift
+                # SPEED_PORT > 0 & < 65535
+                SPEED_PORT="${1:?"error: Please specify the correct port."}"
+                if (( $(echo "$SPEED_PORT < 0" | bc -l) || $(echo "$SPEED_PORT > 65535" | bc -l) )); then
+                    echo -e "\033[31mSPEED_PORT must be greater than or equal to 0 and less than or equal to 65535\033[0m" 1>&2
+                    exit 1
+                fi                  
+                ;;
+            '-u' | '--url') 
+            # 速度测试 URL
+                shift
+                SPEED_URL="${1:?"error: Please specify the correct url."}"
+                if ! is_url "$SPEED_URL"; then
+                    echo -e "\033[31mSPEED_URL must be a valid URL\033[0m" 1>&2
+                    exit 1
+                fi
+                ;;
+            '-i' | '--ipurl')
+            # IP 数据源 URL
+                shift
+                IP_DATA_URL="${1:?"error: Please specify the correct url."}"
+                # 若非 CF，则需要判断是否为 URL
+                if [ "$IP_DATA_URL" != 'cf' ]; then
+                    if ! is_url "$IP_DATA_URL"; then
+                        echo -e "\033[31mIP_DATA_URL must be a valid URL\033[0m" 1>&2
+                        exit 1
+                    fi                
+                fi
+                ;;
+
+            '-r' | '--refresh') 
+            # 刷新 dns
+                REFRESH="true"
+                ;;
+            '-n' | '--dns') 
+            # 刷新 DNS
                 DNS="true"
                 ;;
-            '-o' | '--only') # 只刷新一个主机名
+            '-o' | '--only') 
+            # 只刷新一个主机名
                 ONLY="true"
                 ;;
+
             '-h' | '--help')
                 show_help
                 ;;
@@ -392,11 +464,14 @@ usage: $0 [ options ]
   -t, --type <type>                    set zone type
   -d, --domain <domain>                set domain
   -p, --prefix <prefix>                set prefix
-  -f, --force                          force refresh ip.txt
-  -r, --refresh                        refresh dns
   -s, --speed <speed>                  set download speed
   -c, --cdn <cdn>                      set api cdn
-  -n, --dns                            refresh dns
+  -i, --ipurl <ip_url>                 set ip url
+  -u, --url <url>                      set speed test url
+  -P, --port <port>                    set speed test port
+  -e, --extend <string>                set extend string
+  -r, --refresh                        refresh result.csv
+  -n, --dns                            update DNS records 
   -o, --only                           only refresh one host
 
 e.g.: 

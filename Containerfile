@@ -13,7 +13,7 @@ LABEL maintainer="Jetsung Chan<i@jetsung.com>"
 
 WORKDIR /app
 
-RUN apk add --no-cache curl bash jq
+RUN apk add --no-cache curl bash jq cronie
 
 COPY --from=builder /app/CloudflareSpeedTest/CloudflareSpeedTest /usr/local/bin/CloudflareSpeedTest 
 COPY --from=builder /app/CloudflareSpeedTest/ip.txt /app/ip.txt
@@ -24,4 +24,17 @@ COPY scripts/cfdns.sh /usr/local/bin/cfdns
 RUN chmod +x /usr/local/bin/cfspeedtest
 RUN chmod +x /usr/local/bin/cfdns
 
-CMD [ "cfspeedtest" "-h" ]
+RUN mkdir ~/.cache
+
+RUN printf "%b" '#!'"/usr/bin/env bash\n \
+if [ \"\$1\" = \"daemon\" ];  then \n \
+ exec crond -n -s -m off \n \
+else \n \
+ exec -- \"\$@\"\n \
+fi\n" >/entry.sh && chmod +x /entry.sh
+
+VOLUME /app
+
+ENTRYPOINT ["/entry.sh"]
+
+CMD ["--help"]
