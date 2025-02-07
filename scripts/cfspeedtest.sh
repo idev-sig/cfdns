@@ -177,6 +177,12 @@ check_ip_file() {
 
 
     case "$IP_DATA_URL" in
+        "")
+            if [ ! -f "$_ip_file" ]; then
+                echo -e "\033[31m$_ip_file not found\033[0m"
+                exit 1
+            fi     
+            ;;    
         cf)
             IP_DATA_URL="${API_CDN}/${IP_DATA_URL_CLOUDFLARE//https:\/\/}"
             curl -fsSL -o "$_ip_file" "$IP_DATA_URL"
