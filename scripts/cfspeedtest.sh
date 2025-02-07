@@ -177,12 +177,6 @@ check_ip_file() {
 
 
     case "$IP_DATA_URL" in
-        "")
-            if [ ! -f "$_ip_file" ]; then
-                echo -e "\033[31m$_ip_file not found\033[0m"
-                exit 1
-            fi     
-            ;;    
         cf)
             IP_DATA_URL="${API_CDN}/${IP_DATA_URL_CLOUDFLARE//https:\/\/}"
             curl -fsSL -o "$_ip_file" "$IP_DATA_URL"
@@ -200,8 +194,9 @@ check_ip_file() {
             curl -fsSL "$IP_DATA_URL" | jq -r '.prefixes[].ip_prefix' > "$_ip_file"
             ;;
         *)
-            echo -e "\033[31mIP data URL $IP_DATA_URL is not supported\033[0m"
-            exit 1
+            if [ -n "$IP_DATA_URL" ]; then
+                curl -fsSL -o "$_ip_file" "$IP_DATA_URL"
+            fi
             ;;
     esac    
 
