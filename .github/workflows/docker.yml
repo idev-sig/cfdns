@@ -220,6 +220,7 @@ jobs:
             ${{ steps.tcr_tag.outputs.latest || '' }}
 
       - uses: actions/delete-package-versions@v5
+        continue-on-error: true
         with:
           package-name: 'cfdns'
           package-type: 'container'

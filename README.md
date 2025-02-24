@@ -69,7 +69,7 @@ docker exec cfdns pkill -HUP crond
 docker exec cfdns pkill crond && crond
 ```
 
-- 脚本方式（位于文件夹 `scripts`）
+### 脚本方式（位于文件夹 `scripts`）
 
 ```sh
 e.g.: 
