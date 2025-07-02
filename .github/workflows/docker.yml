@@ -17,7 +17,7 @@ jobs:
     name: Build and Push
     runs-on: ubuntu-latest
     env:
-      acr_registry: registry.cn-hangzhou.aliyuncs.com
+      acr_registry: registry.cn-guangzhou.aliyuncs.com
       hcr_registry: swr.ap-southeast-3.myhuaweicloud.com
       tcr_registry: ccr.ccs.tencentyun.com
     steps:
