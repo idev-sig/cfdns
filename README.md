@@ -30,6 +30,9 @@ docker pull ghcr.io/idevsig/cfdns:latest
 
 ```sh
 docker run --rm idevsig/cfdns:latest cfspeedtest -a user@example.com -k api_key -d example.com -p cf -s 5 -n -o
+
+# gcore
+docker run --rm idevsig/cfdns:latest cfspeedtest -a user@example.com -k api_key -d example.com -p cf -s 5 -n -o -i gc -u https://speedtest.gcore.com/testfile
 ```
 
 #### `docker compose` 方式
@@ -96,7 +99,7 @@ usage: ./cfspeedtest.sh [ options ]
   -p, --prefix <prefix>                set prefix
   -s, --speed <speed>                  set download speed
   -c, --cdn <cdn>                      set api cdn
-  -i, --ipurl <ip_url>                 set ip url
+  -i, --ipurl <ip_url>                 set ip url (cf,gc,ct,aws)
   -u, --url <url>                      set speed test url
   -P, --port <port>                    set speed test port
   -e, --extend <string>                set extend string
@@ -113,7 +116,7 @@ usage: ./cfspeedtest.sh [ options ]
 > `-p` / `--prefix`:           域名前缀   
 > `-s` / `--speed`:            下载速度下限，单位 **`M`**，低于此速度则不记录     
 > `-c` / `--cdn`:              API CDN，更新脚本时不需再扶梯     
-> `-i` / `--ipurl`:            [`IP 数据源`](https://www.cloudflare.com/ips-v4) URL（以支持 [`GCore`](https://api.gcore.com/cdn/public-ip-list), [`CloudFront`](https://d7uri8nf7uskq.cloudfront.net/tools/list-cloudfront-ips), [`AWS`](https://ip-ranges.amazonaws.com/ip-ranges.json)）   
+> `-i` / `--ipurl`:            [`IP 数据源`](https://www.cloudflare.com/ips-v4) URL（以支持 [`GCore`](https://api.gcore.com/cdn/public-ip-list), [`CloudFront`](https://d7uri8nf7uskq.cloudfront.net/tools/list-cloudfront-ips), [`AWS`](https://ip-ranges.amazonaws.com/ip-ranges.json)，可使用 (`cf,gc,ct,aws`)）   
 > `-P` / `--port`:             速度测试端口   
 > `-u` / `--url`:              速度测试 URL   
 > `-e` / `--extend`:           扩展参数字符串   

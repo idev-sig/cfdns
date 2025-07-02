@@ -19,7 +19,7 @@ IP_DATA_URL_AMAZON_JSON="https://ip-ranges.amazonaws.com/ip-ranges.json"
 IN_CHINA="" # 是否在中国
 
 CURRENT_EXEC_FILE="/usr/local/bin/cfspeedtest.sh"
-API_CDN="https://c.kkgo.cc" # API CDN
+API_CDN="https://fastfile.asfd.cn" # API CDN
 RESULT_CSV="result.csv"     # 结果 CSV 文件名
 
 CF_DNS_EXEC="" # CloudflareDNS 脚本文件名
@@ -441,7 +441,7 @@ judgment_parameters() {
                 IP_DATA_URL="${1:?"error: Please specify the correct url."}"
 
                 # 检查 IP_DATA_URL 是否为非 CF、GC、AWS、CT 的 URL，若为普通 URL，则验证其有效性
-                case $IP_DATA_URL in
+                case ${IP_DATA_URL,,} in
                     cf|gc|aws|ct)
                         # 如果是 CF、GC、AWS、CT，则无需验证 URL
                         ;;
@@ -493,7 +493,7 @@ usage: $0 [ options ]
   -p, --prefix <prefix>                set prefix
   -s, --speed <speed>                  set download speed
   -c, --cdn <cdn>                      set api cdn
-  -i, --ipurl <ip_url>                 set ip url
+  -i, --ipurl <ip_url>                 set ip url (cf,gc,ct,aws)
   -u, --url <url>                      set speed test url
   -P, --port <port>                    set speed test port
   -e, --extend <string>                set extend string
