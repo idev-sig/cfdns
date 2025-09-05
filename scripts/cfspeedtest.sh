@@ -1,13 +1,25 @@
 #!/usr/bin/env bash
 
-# CloudflareSpeedTest
-# https://github.com/XIU2/CloudflareSpeedTest
-#
+#============================================================
+# File: cfspeedtest.sh
+# Description: 优化 CDN IP 并更新至 CloudFlare NS Zone
+# URL:
+# Author: Jetsung Chan <i@jetsung.com>
+# Version: 0.1.0
+# CreatedAt: 2025-09-05
+# UpdatedAt: 2025-09-05
+#============================================================
 
-set -euo pipefail
+# 依赖：https://github.com/XIU2/CloudflareSpeedTest
+
+if [[ -n "${DEBUG:-}" ]]; then
+    set -eux
+else
+    set -euo pipefail
+fi
 
 # PROJ_URL
-PROJ_URL="https://github.com/idevsig/cfdns/raw/refs/heads/main"
+PROJ_URL="https://github.com/idev-sig/cfdns/raw/refs/heads/main"
 CN_PROJ_URL="https://framagit.org/idev/cfdns/-/raw/main"
 
 IP_DATA_URL=""
@@ -16,10 +28,12 @@ IP_DATA_URL_GCORE_JSON="https://api.gcore.com/cdn/public-ip-list"
 IP_DATA_URL_CLOUDFRONT_JSON="https://d7uri8nf7uskq.cloudfront.net/tools/list-cloudfront-ips"
 IP_DATA_URL_AMAZON_JSON="https://ip-ranges.amazonaws.com/ip-ranges.json"
 
-IN_CHINA="" # 是否在中国
+IP_TEST_URL_CLOUDFLARE="https://www.cloudflare.com/cdn-cgi/trace"
+IP_TEST_URL_GCORE="https://hk2-speedtest.tools.gcore.com/speedtest-backend/garbage.php?ckSize=1000"
+
+IN_CHINA="1" # 是否在中国
 
 CURRENT_EXEC_FILE="/usr/local/bin/cfspeedtest.sh"
-API_CDN="https://fastfile.asfd.cn" # API CDN
 RESULT_CSV="result.csv"     # 结果 CSV 文件名
 
 CF_DNS_EXEC="" # CloudflareDNS 脚本文件名
@@ -37,6 +51,56 @@ ONLY=""       # 只刷新指定主机名
 SPEED_PORT="" # 速度测试端口
 SPEED_URL=""  # 速度测试 URL
 EXTEND_STRING="" # 扩展字符串
+QUANTITY=0    # 测试数量，默认为 0，表示无限制
+
+CDN_URL="${CDN:-https://fastfile.asfd.cn/}"
+
+USER_ID="$(id -u)"
+
+sudo_exec() {
+    if [[ "$USER_ID" -ne 0 ]]; then
+        sudo "$@"
+    else
+        "$@"
+    fi
+}
+
+check_is_command() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+check_in_china() {
+    if [[ -n "${CN:-}" ]]; then
+        return 0 # 手动指定
+    fi
+    if [[ "$(curl -s -m 3 -o /dev/null -w "%{http_code}" https://www.google.com)" == "000" ]]; then
+        return 0 # 中国网络
+    fi
+    return 1 # 非中国网络
+}
+
+# 若为 https://xxx.xx 不以 / 结尾，则组合时去掉加速网址的 https://
+#   格式为 https://file.xxx.io/github.com/
+# 若为 https://xxx.xx/ 以 / 结尾，则组合时保留加速网址的 https://
+#   格式为 https://xxx.xx/https://github.com/
+check_remove_https() {
+    if [[ -n "$1" && "${1: -1}" != "/" ]]; then
+        echo 1
+    fi    
+}
+
+do_remove_https() {
+    local url="$1"
+    if [[ -n "$NO_HTTPS" ]]; then
+        # shellcheck disable=SC2001
+        echo "$url" | sed 's|https:/||2'
+
+    else 
+        echo "$url"
+    fi
+}
+
+########################## 以上为通用函数 #########################
 
 init_os() {
     OS=$(uname | tr '[:upper:]' '[:lower:]')
@@ -69,16 +133,6 @@ init_arch() {
     esac
 }
 
-check_command() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-check_in_china() {
-    if [ "$(curl -s -m 3 -o /dev/null -w "%{http_code}" https://www.google.com)" != "200" ]; then
-        IN_CHINA=1
-    fi
-}
-
 # 判断是否为 URL 的函数
 is_url() {
     local url="$1"
@@ -90,45 +144,54 @@ is_url() {
     fi
 }
 
-get_latest_version() {
-    repo=${1:-XIU2/CloudflareSpeedTest}
+get_download_url() {
+    repo_api_url=$(do_remove_https "${CDN_URL}https://api.github.com/repos/${1}/releases/latest")
+    curl -fsSL "$repo_api_url" | jq -r --arg os "$OS" --arg arch "$ARCH" '
+        .assets[] 
+        | select(.name | test($os) and test($arch)) 
+        | .browser_download_url
+    '
+}
 
-    latest_api_url="https://api.github.com/repos/$repo/releases/latest"
-    if [ -n "$IN_CHINA" ]; then
-        latest_api_url="${API_CDN}/${latest_api_url//https:\/\/}"
-    fi
+download_exact() {
+    local download_file="tmp.tar.gz"
+    local file_bin="cfst"
+    TMP_DIR=$(mktemp -d /tmp/cfst.XXXXXX)
 
-    doanload_url=$(echo "$repo" | tr -d ' ' | xargs -I {} curl -s "$latest_api_url" | jq -r '.assets[].browser_download_url' | grep "${OS}_${ARCH}")
-    if [ -z "$doanload_url" ]; then
-        echo -e "\033[31mlatest version not found\033[0m"
+    cleanup() {
+        rm -rf -- "$TMP_DIR"
+    }
+    trap cleanup EXIT
+
+    pushd "$TMP_DIR" >/dev/null
+    
+    _download_url=$(do_remove_https "${CDN_URL}${DOWNLOAD_URL}")
+    if ! curl -fsSL "$_download_url" -o "$download_file"; then
+        echo "Error: Failed to download $download_file"
         exit 1
     fi
 
-    if [ -n "$IN_CHINA" ]; then 
-        doanload_url="${API_CDN}/${doanload_url//https:\/\/}"
+    if ! tar -xf "$download_file"; then 
+        echo "Error: Extraction failed"
+        exit 1
     fi
-    
-    echo "$doanload_url"
-}
 
-sudo_check() {
-    if [ "$EUID" -ne 0 ]; then
-        sudo "$@"
-        return
-    fi
-    "$@"
+    sudo_exec mv "$file_bin" /usr/local/bin/
+
+    CFST_FILE="$file_bin"
+    popd >/dev/null
 }
 
 check_cfst_file() {
     _cfst_file_list=("CloudflareSpeedTest" "CloudflareST" "cfst")
     for _cfst_file in "${_cfst_file_list[@]}"; do
-        if check_command "$_cfst_file"; then
+        if check_is_command "$_cfst_file"; then
             CFST_FILE="$_cfst_file"
             break
         fi
     done
 
-    if ! check_command "$CFST_FILE"; then
+    if ! check_is_command "$CFST_FILE"; then
         cfst_from_compressed
     fi
 }
@@ -137,34 +200,14 @@ cfst_from_compressed() {
     init_arch
     init_os
 
-    download_url=$(get_latest_version "XIU2/CloudflareSpeedTest")
-    # echo "download_url: $download_url"
+    DOWNLOAD_URL="$(get_download_url XIU2/CloudflareSpeedTest)"
 
-    savedir=$(mktemp -d -t cfst.XXXXXX)
-    packname=$(basename "$download_url")
-    fullfilepath="$savedir/$packname"
-
-    # echo "save to: $fullfilepath"
-    curl -fsSL -o "$fullfilepath" "$download_url"
-
-    pushd "$savedir" || {
-        echo -e "\033[31mcd $savedir error\033[0m"
-        exit 1
-    }
-    tar -zxf "$packname" || {
-        echo -e "\033[31mtar -zxf $packname error\033[0m"
-        exit 1
-    }
-    filename="${packname//_*}"
-    sudo_check mv "$filename" /usr/local/bin/cfst
-
-    CFST_FILE="cfst"
-    popd || exit 1    
+    download_exact
 }
 
 check_ip_file() {
-    if ! check_command "$CFST_FILE"; then
-        echo -e "\033[31mcfspeedtest not found\033[0m"
+    if ! check_is_command "$CFST_FILE"; then
+        echo -e "\033[31m${CFST_FILE} not found\033[0m"
         exit 1
     fi
 
@@ -178,19 +221,19 @@ check_ip_file() {
 
     case "$IP_DATA_URL" in
         cf)
-            IP_DATA_URL="${API_CDN}/${IP_DATA_URL_CLOUDFLARE//https:\/\/}"
+            IP_DATA_URL=$(do_remove_https "${CDN_URL}${IP_DATA_URL_CLOUDFLARE}")
             curl -fsSL -o "$_ip_file" "$IP_DATA_URL"
             ;;
         gc)
-            IP_DATA_URL="${API_CDN}/${IP_DATA_URL_GCORE_JSON//https:\/\/}"
+            IP_DATA_URL=$(do_remove_https "${CDN_URL}${IP_DATA_URL_GCORE_JSON}")
             curl -fsSL "$IP_DATA_URL" | jq -r '.addresses[]' > "$_ip_file"
             ;;
         ct)
-            IP_DATA_URL="${API_CDN}/${IP_DATA_URL_CLOUDFRONT_JSON//https:\/\/}"
+            IP_DATA_URL=$(do_remove_https "${CDN_URL}${IP_DATA_URL_CLOUDFRONT_JSON}")
             curl -fsSL "$IP_DATA_URL" | jq -r '.CLOUDFRONT_GLOBAL_IP_LIST[]' > "$_ip_file"
             ;;
         aws)
-            IP_DATA_URL="${API_CDN}/${IP_DATA_URL_AMAZON_JSON//https:\/\/}"
+            IP_DATA_URL=$(do_remove_https "${CDN_URL}${IP_DATA_URL_AMAZON_JSON}")
             curl -fsSL "$IP_DATA_URL" | jq -r '.prefixes[].ip_prefix' > "$_ip_file"
             ;;
         *)
@@ -258,7 +301,7 @@ check_cfdns_file() {
     _cfdns_file_list=("./cfdns.sh" "cfdns.sh" "cfdns")
     # 从列表中查找可执行文件
     for _cfdns_file in "${_cfdns_file_list[@]}"; do
-        if check_command "$_cfdns_file"; then
+        if check_is_command "$_cfdns_file"; then
             CF_DNS_EXEC="$_cfdns_file"
             break
         fi
@@ -269,25 +312,146 @@ check_cfdns_file() {
     # 如果是相对路径，则将其复制到 /usr/local/bin
     if [[ "$CF_DNS_EXEC" == "./"* ]]; then
         CF_DNS_EXEC="${CF_DNS_EXEC:2}"
-        sudo_check cp "$CF_DNS_EXEC" "$CF_DNS_PATH"
+        sudo_exec cp "$CF_DNS_EXEC" "$CF_DNS_PATH"
         CF_DNS_EXEC="cfdns"
     fi
 
     # 从 Git 拉取
-    if ! check_command "$CF_DNS_EXEC"; then
+    if ! check_is_command "$CF_DNS_EXEC"; then
         if [  -n "$IN_CHINA" ]; then
             PROJ_URL="$CN_PROJ_URL"
         fi
-        curl -fsSL -o "$CF_DNS_PATH" "$PROJ_URL/scripts/cfdns.sh"
-        sudo_check chmod +x "$CF_DNS_PATH"
+        sudo_exec curl -fsSL -o "$CF_DNS_PATH" "$PROJ_URL/scripts/cfdns.sh"
+        sudo_exec chmod +x "$CF_DNS_PATH"
         CF_DNS_EXEC="cfdns"
     fi
 
     # 如果 cfdns not found
-    if ! check_command "$CF_DNS_EXEC"; then
+    if ! check_is_command "$CF_DNS_EXEC"; then
         echo -e "\033[31mcfdns not found\033[0m"
         exit 1
     fi    
+}
+
+check_dependencies() {
+    # 判断 debian / ubuntu centos / redhat / fedora / archlinux / alpine
+    local missing_deps=()
+    local required_deps=("curl" "jq" "bc" "tar")
+    
+    # 检查必需的依赖
+    for dep in "${required_deps[@]}"; do
+        if ! check_is_command "$dep"; then
+            missing_deps+=("$dep")
+        fi
+    done
+    
+    # 如果没有缺失的依赖，直接返回
+    if [ ${#missing_deps[@]} -eq 0 ]; then
+        return 0
+    fi
+    
+    echo "Missing dependencies: ${missing_deps[*]}"
+    echo "Attempting to install missing dependencies..."
+    
+    # 检测操作系统
+    if [ -f /etc/os-release ]; then
+        # shellcheck source=/dev/null
+        . /etc/os-release
+        OS_ID="$ID"
+        OS_ID_LIKE="${ID_LIKE:-}"
+    elif [ -f /etc/debian_version ]; then
+        OS_ID="debian"
+    elif [ -f /etc/redhat-release ]; then
+        OS_ID="rhel"
+    elif [ -f /etc/alpine-release ]; then
+        OS_ID="alpine"
+    else
+        OS_ID="unknown"
+    fi
+    
+    # 根据操作系统安装依赖
+    case "$OS_ID" in
+        ubuntu|debian|linuxmint)
+            echo "Detected Debian/Ubuntu-based system"
+            sudo_exec apt-get update
+            sudo_exec apt-get install -y "${missing_deps[@]}"
+            ;;
+        centos|rhel|fedora|rocky|almalinux)
+            echo "Detected Red Hat-based system"
+            if check_is_command "dnf"; then
+                sudo_exec dnf install -y "${missing_deps[@]}"
+            elif check_is_command "yum"; then
+                sudo_exec yum install -y "${missing_deps[@]}"
+            else
+                echo -e "\033[31mError: Neither dnf nor yum package manager found\033[0m"
+                return 1
+            fi
+            ;;
+        arch|manjaro)
+            echo "Detected Arch Linux-based system"
+            sudo_exec pacman -Sy --noconfirm "${missing_deps[@]}"
+            ;;
+        alpine)
+            echo "Detected Alpine Linux"
+            sudo_exec apk update
+            sudo_exec apk add "${missing_deps[@]}"
+            ;;
+        opensuse*|sles)
+            echo "Detected openSUSE/SUSE system"
+            sudo_exec zypper install -y "${missing_deps[@]}"
+            ;;
+        *)
+            # 检查 ID_LIKE 字段
+            case "$OS_ID_LIKE" in
+                *debian*)
+                    echo "Detected Debian-like system"
+                    sudo_exec apt-get update
+                    sudo_exec apt-get install -y "${missing_deps[@]}"
+                    ;;
+                *rhel*|*fedora*)
+                    echo "Detected Red Hat-like system"
+                    if check_is_command "dnf"; then
+                        sudo_exec dnf install -y "${missing_deps[@]}"
+                    elif check_is_command "yum"; then
+                        sudo_exec yum install -y "${missing_deps[@]}"
+                    else
+                        echo -e "\033[31mError: Neither dnf nor yum package manager found\033[0m"
+                        return 1
+                    fi
+                    ;;
+                *arch*)
+                    echo "Detected Arch-like system"
+                    sudo_exec pacman -Sy --noconfirm "${missing_deps[@]}"
+                    ;;
+                *suse*)
+                    echo "Detected SUSE-like system"
+                    sudo_exec zypper install -y "${missing_deps[@]}"
+                    ;;
+                *)
+                    echo -e "\033[31mError: Unsupported operating system: $OS_ID\033[0m"
+                    echo "Please manually install the following dependencies: ${missing_deps[*]}"
+                    return 1
+                    ;;
+            esac
+            ;;
+    esac
+    
+    # 再次检查依赖是否安装成功
+    local still_missing=()
+    for dep in "${missing_deps[@]}"; do
+        if ! check_is_command "$dep"; then
+            still_missing+=("$dep")
+        fi
+    done
+    
+    if [ ${#still_missing[@]} -ne 0 ]; then
+        echo -e "\033[31mError: Failed to install dependencies: ${still_missing[*]}\033[0m"
+        echo "Please manually install these dependencies and try again."
+        return 1
+    fi
+    
+    echo "All dependencies installed successfully."
+    return 0
 }
 
 refresh_dns() {
@@ -317,7 +481,7 @@ refresh_dns() {
 
     if [ -n "$ONLY" ]; then
         # 刷新 DNS
-        IFS=, read -r ipv4 _ _ _ _ speed < <(sed -n '2p' "$RESULT_CSV")
+        IFS=, read -r ipv4 _ _ _ _ speed _ < <(sed -n '2p' "$RESULT_CSV")
         if (( $(echo "$speed < $SPEED" | bc -l) )); then
             echo -e "\033[31mspeed too low($speed), please check\033[0m"
             exit 1
@@ -331,12 +495,17 @@ refresh_dns() {
     fi
 
     index=0
-    while IFS=, read -r ipv4 _ _ _ _ speed; do
+    while IFS=, read -r ipv4 _ _ _ _ speed _; do
         if (( $(echo "$speed < $SPEED" | bc -l) )); then
             break
         fi
 
         index=$(echo "$index + 1" | bc)
+
+        # 判断 index 是否大于 QUANTITY
+        if [[ "$QUANTITY" -ne 0 && "$index" -gt "$QUANTITY" ]]; then
+            return
+        fi
 
         "$CF_DNS_EXEC" -a "$CLOUDFLARE_EMAIL" \
             -k "$CLOUDFLARE_API_KEY" \
@@ -350,8 +519,8 @@ judgment_parameters() {
     # 参数带帮助
     if [ $# -eq 0 ]; then
         if [ "$0" == "bash" ] || [ "$0" == "-bash" ]; then # 无参数，远程，安装
-            cat | sudo_check tee "$CURRENT_EXEC_FILE" > /dev/null
-            sudo_checkchmod +x "$CURRENT_EXEC_FILE"
+            cat | sudo_exec tee "$CURRENT_EXEC_FILE" > /dev/null
+            sudo_exec chmod +x "$CURRENT_EXEC_FILE"
         else # 无参数，本地
             show_help
         fi
@@ -407,12 +576,12 @@ judgment_parameters() {
                 fi  
                 ;;
             '-c' | '--cdn') 
-            # API CDN
+            # URL CDN
                 shift
-                API_CDN="${1:?"error: Please specify the correct cdn."}"
+                CDN_URL="${1:?"error: Please specify the correct cdn."}"
                 # CEHCK WEB URL
-                if [[ "$API_CDN" != *"/"* ]]; then
-                    echo -e "\033[31mAPI_CDN must be a web url\033[0m"
+                if [[ "$CDN_URL" != *"/"* ]]; then
+                    echo -e "\033[31mCDN_URL must be a web url\033[0m"
                     exit 1
                 fi
                 ;;
@@ -468,6 +637,12 @@ judgment_parameters() {
                 ONLY="true"
                 ;;
 
+            '-q' | '--quantity') 
+            # 记录数量
+                shift
+                QUANTITY="${1:?"error: Please specify the correct quantity."}"
+                ;;
+
             '-h' | '--help')
                 show_help
                 ;;
@@ -491,11 +666,12 @@ usage: $0 [ options ]
   -t, --type <type>                    set zone type
   -d, --domain <domain>                set domain
   -p, --prefix <prefix>                set prefix
-  -s, --speed <speed>                  set download speed
-  -c, --cdn <cdn>                      set api cdn
+  -s, --speed <speed>                  set download speed (default: 2)
+  -c, --cdn <cdn>                      set cdn url
   -i, --ipurl <ip_url>                 set ip url (cf,gc,ct,aws)
   -u, --url <url>                      set speed test url
   -P, --port <port>                    set speed test port
+  -q, --quantity <quantity>            set record quantity
   -e, --extend <string>                set extend string
   -r, --refresh                        refresh result.csv
   -n, --dns                            update DNS records 
@@ -515,7 +691,21 @@ EOF
 main() {
     judgment_parameters "$@"
 
-    check_in_china
+    if ! check_in_china; then
+        CDN_URL=""
+        IN_CHINA=""
+    fi
+
+    case "${IP_DATA_URL:-}" in
+        gc)
+            if [[ -z "${SPEED_URL:-}" ]]; then
+                SPEED_URL="$IP_TEST_URL_GCORE"
+            fi
+    esac
+
+    NO_HTTPS=$(check_remove_https "$CDN_URL")
+
+    check_dependencies
 
     check_cfst_file
 
@@ -529,3 +719,4 @@ main() {
 }
 
 main "$@"
+
