@@ -9,7 +9,7 @@ on:
 
 env:
   branch: latest
-  image_org: jetsung
+  image_org: idevsig
   acr_registry: registry.cn-guangzhou.aliyuncs.com
   hcr_registry: swr.ap-southeast-3.myhuaweicloud.com
   tcr_registry: sgccr.ccs.tencentyun.com
@@ -39,12 +39,6 @@ jobs:
             echo "Detected tag: $ref_tag"
             echo "tag=$ref_tag" >> $GITHUB_ENV
             echo "tag=$ref_tag" >> $GITHUB_OUTPUT
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -90,7 +84,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y skopeo
         skopeo --version
-    - name: Login to GitHub Container Registry (ghcr.io)
+    - name: Login to DockerHub
       uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
